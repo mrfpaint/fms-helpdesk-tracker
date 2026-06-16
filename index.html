@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FMS Helpdesk — Email Tracker</title>
+<script src="./msal-browser.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2333;
+    --border: #2a3050;
+    --border2: #3a4060;
+    --text: #e8ecf4;
+    --muted: #7a85a0;
+    --accent: #4f8ef7;
+    --accent2: #3a6fd4;
+    --green: #3ecf8e;
+    --amber: #f5a623;
+    --red: #f06060;
+    --purple: #a78bfa;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+  /* ── LOGIN SCREEN ── */
+  #loginScreen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; gap: 24px; padding: 2rem;
+  }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 2.5rem 2rem; max-width: 360px; width: 100%;
+    text-align: center;
+  }
+  .login-logo {
+    width: 48px; height: 48px; background: var(--accent); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; margin: 0 auto 1.5rem; font-weight: 600; color: #fff;
+  }
+  .login-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .login-sub { font-size: 13px; color: var(--muted); margin-bottom: 2rem; line-height: 1.5; }
+  .btn-login {
+    width: 100%; padding: 11px; background: var(--accent); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: background 0.2s; font-family: var(--font);
+  }
+  .btn-login:hover { background: var(--accent2); }
+  .login-note { font-size: 11px; color: var(--muted); margin-top: 1rem; }
+
+  /* ── APP SHELL ── */
+  #appScreen { display: none; flex-direction: column; min-height: 100vh; }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem; height: 56px; display: flex; align-items: center;
+    justify-content: space-between; position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .hlogo {
+    background: var(--accent); color: #fff; font-weight: 600; font-size: 13px;
+    padding: 4px 8px; border-radius: 6px; font-family: var(--mono);
+  }
+  .htitle { font-size: 15px; font-weight: 600; }
+  .hsub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .user-chip {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted);
+  }
+  .btn-refresh {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 14px; border-radius: var(--radius);
+    font-size: 12px; cursor: pointer; font-family: var(--font); transition: border-color 0.2s;
+  }
+  .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-logout {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 12px; border-radius: var(--radius); font-size: 12px;
+    cursor: pointer; font-family: var(--font);
+  }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── MAIN ── */
+  .main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+  /* ── STATS ── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 14px 16px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-val { font-size: 26px; font-weight: 600; font-family: var(--mono); }
+  .stat-val.blue { color: var(--accent); }
+  .stat-val.red { color: var(--red); }
+  .stat-val.amber { color: var(--amber); }
+  .stat-val.green { color: var(--green); }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 1rem;
+  }
+  .toolbar select, .toolbar input {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 12px; border-radius: var(--radius);
+    font-size: 13px; font-family: var(--font); outline: none;
+  }
+  .toolbar select:focus, .toolbar input:focus { border-color: var(--accent); }
+  .toolbar input { flex: 1; min-width: 180px; }
+  .result-count { font-size: 12px; color: var(--muted); margin-left: auto; font-family: var(--mono); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--surface2); }
+  th {
+    padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 11px 14px; border-bottom: 1px solid var(--border);
+    color: var(--text); font-size: 13px; vertical-align: middle;
+    max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .col-id { width: 95px; }
+  .col-sub { width: 28%; }
+  .col-from { width: 18%; }
+  .col-dir { width: 70px; }
+  .col-date { width: 90px; }
+  .col-age { width: 70px; }
+  .col-status { width: 90px; }
+  .col-act { width: 70px; }
+
+  /* ── BADGES ── */
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+  }
+  .b-new { background: rgba(79,142,247,0.15); color: #7aadff; border: 1px solid rgba(79,142,247,0.3); }
+  .b-open { background: rgba(245,166,35,0.15); color: #f5b95a; border: 1px solid rgba(245,166,35,0.3); }
+  .b-overdue { background: rgba(240,96,96,0.15); color: #f08080; border: 1px solid rgba(240,96,96,0.3); }
+  .b-closed { background: rgba(62,207,142,0.15); color: #5dd4a0; border: 1px solid rgba(62,207,142,0.3); }
+  .b-pending { background: rgba(167,139,250,0.15); color: #c4b0fc; border: 1px solid rgba(167,139,250,0.3); }
+  .b-in { background: rgba(79,142,247,0.1); color: #7aadff; font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px; }
+  .b-out { background: rgba(167,139,250,0.1); color: #c4b0fc; font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px; }
+
+  /* ── AGE COLORS ── */
+  .age-ok { color: var(--green); font-family: var(--mono); font-size: 12px; }
+  .age-warn { color: var(--amber); font-family: var(--mono); font-size: 12px; }
+  .age-hot { color: var(--red); font-family: var(--mono); font-size: 12px; }
+
+  .tid { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .from-text { font-size: 12px; color: var(--muted); }
+
+  .btn-view {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    font-family: var(--font); transition: all 0.15s;
+  }
+  .btn-view:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── LOADING / EMPTY / ERROR ── */
+  .state-box {
+    text-align: center; padding: 3rem 2rem; color: var(--muted); font-size: 13px;
+  }
+  .state-box .icon { font-size: 28px; margin-bottom: 10px; }
+  .state-box .msg { font-size: 14px; color: var(--text); margin-bottom: 6px; font-weight: 500; }
+  .spinner {
+    width: 24px; height: 24px; border: 2px solid var(--border2);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite; margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── DETAIL PANEL ── */
+  #detailPanel {
+    display: none; position: fixed; right: 0; top: 0; bottom: 0;
+    width: 400px; background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 200; flex-direction: column; overflow: hidden;
+  }
+  .panel-header {
+    padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-title { font-size: 14px; font-weight: 600; }
+  .btn-close {
+    background: none; border: none; color: var(--muted); font-size: 18px;
+    cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1;
+  }
+  .btn-close:hover { background: var(--surface2); color: var(--text); }
+  .panel-body { padding: 1.25rem; overflow-y: auto; flex: 1; }
+  .panel-row { margin-bottom: 12px; }
+  .panel-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .panel-value { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .panel-snippet {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px; font-size: 12px;
+    color: var(--muted); line-height: 1.6; margin-top: 12px;
+  }
+  .status-select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: var(--radius);
+    font-size: 13px; font-family: var(--font); width: 100%; margin-top: 4px;
+  }
+  .btn-save-status {
+    width: 100%; margin-top: 8px; padding: 8px; background: var(--accent);
+    color: #fff; border: none; border-radius: var(--radius); font-size: 13px;
+    cursor: pointer; font-family: var(--font); font-weight: 500;
+  }
+  .btn-save-status:hover { background: var(--accent2); }
+
+  /* ── FOOTER ── */
+  .footer {
+    text-align: center; padding: 1rem; font-size: 11px;
+    color: var(--muted); border-top: 1px solid var(--border); margin-top: 2rem;
+    font-family: var(--mono);
+  }
+
+  /* ── LOADING BAR ── */
+  #loadBar {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: var(--accent); width: 0; z-index: 999;
+    transition: width 0.3s ease;
+  }
+
+  @media(max-width:700px) {
+    .col-from, .col-id { display: none; }
+    #detailPanel { width: 100%; border-left: none; border-top: 1px solid var(--border); top: auto; height: 60vh; }
+    .main { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div id="loadBar"></div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">FMS</div>
+    <div class="login-title">Helpdesk Email Tracker</div>
+    <div class="login-sub">Sign in with your MRF Microsoft 365 account to view and manage helpdesk emails from fms.ho@mrfmail.com</div>
+    <button class="btn-login" onclick="signIn()">Sign in with Microsoft</button>
+    <div class="login-note">Uses your existing MRF corporate account — no separate password needed</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div id="loadBar"></div>
+  <header class="header">
+    <div class="header-left">
+      <div class="hlogo">FMS</div>
+      <div>
+        <div class="htitle">Helpdesk Email Tracker</div>
+        <div class="hsub">fms.ho@mrfmail.com</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="user-chip" id="userChip">Loading...</span>
+      <button class="btn-refresh" onclick="loadEmails()">↻ Refresh</button>
+      <button class="btn-logout" onclick="signOut()">Sign out</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Total emails</div><div class="stat-val blue" id="sTotal">—</div></div>
+      <div class="stat"><div class="stat-label">Overdue (7d+)</div><div class="stat-val red" id="sOverdue">—</div></div>
+      <div class="stat"><div class="stat-label">Open / Pending</div><div class="stat-val amber" id="sOpen">—</div></div>
+      <div class="stat"><div class="stat-label">Closed</div><div class="stat-val green" id="sClosed">—</div></div>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" id="fSearch" placeholder="Search subject or sender..." oninput="render()"/>
+      <select id="fStatus" onchange="render()">
+        <option value="">All status</option>
+        <option value="New">New</option>
+        <option value="Open">Open</option>
+        <option value="Pending">Pending</option>
+        <option value="Overdue">Overdue</option>
+        <option value="Closed">Closed</option>
+      </select>
+      <select id="fDir" onchange="render()">
+        <option value="">All direction</option>
+        <option value="IN">Received</option>
+        <option value="OUT">Sent</option>
+      </select>
+      <select id="fAge" onchange="render()">
+        <option value="">All ages</option>
+        <option value="hot">Hot (7d+)</option>
+        <option value="warn">Aging (3–6d)</option>
+        <option value="ok">Fresh (0–2d)</option>
+      </select>
+      <span class="result-count" id="resultCount">0 results</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-id">Ticket #</th>
+            <th class="col-sub">Subject</th>
+            <th class="col-from">From / To</th>
+            <th class="col-dir">Dir</th>
+            <th class="col-date">Date</th>
+            <th class="col-age">Age</th>
+            <th class="col-status">Status</th>
+            <th class="col-act">View</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8">
+            <div class="state-box">
+              <div class="spinner"></div>
+              <div class="msg">Loading emails...</div>
+              <div>Connecting to Microsoft 365</div>
+            </div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="footer">MRF Vapocure Paints · IT Department · FMS Helpdesk Tracker v1.0</div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div id="detailPanel">
+  <div class="panel-header">
+    <div class="panel-title" id="panelTitle">Email Detail</div>
+    <button class="btn-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIG — update CLIENT_ID after app registration
+// ══════════════════════════════════════════════
+const CONFIG = {
+  clientId: '329fdcfb-ce78-4015-9f88-4c4615302592',
+  tenantId: '2d3a57cf-4548-4088-a4b4-3f336f531b04',  // your MRF tenant
+  helpdesk: 'fms.ho@mrfmail.com',
+  daysBack: 30
+};
+
+const msalConfig = {
+  auth: {
+    clientId: CONFIG.clientId,
+    authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
+    redirectUri: window.location.origin + window.location.pathname
+  },
+  cache: { cacheLocation: 'sessionStorage' }
+};
+
+const scopes = ['Mail.Read', 'User.Read'];
+let msalInstance, allEmails = [], statusMap = {};
+
+// Load saved statuses from localStorage
+try { statusMap = JSON.parse(localStorage.getItem('fms_statuses') || '{}'); } catch(e) {}
+
+function saveStatuses() {
+  try { localStorage.setItem('fms_statuses', JSON.stringify(statusMap)); } catch(e) {}
+}
+
+// ── MSAL INIT ──────────────────────────────────
+async function initMsal() {
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    msalInstance.setActiveAccount(accounts[0]);
+    showApp(accounts[0]);
+    loadEmails();
+  }
+}
+
+async function signIn() {
+  try {
+    if (!msalInstance) { await initMsal(); }
+    const resp = await msalInstance.loginPopup({ scopes });
+    msalInstance.setActiveAccount(resp.account);
+    showApp(resp.account);
+    loadEmails();
+  } catch(e) {
+    console.error('Login error:', e);
+    alert('Sign in failed: ' + (e.message || e));
+  }
+}
+
+async function signOut() {
+  try { await msalInstance.logoutPopup(); } catch(e) { console.error(e); }
+}
+
+function showApp(account) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+  document.getElementById('userChip').textContent = account.username || account.name;
+}
+
+async function getToken() {
+  const req = { scopes };
+  try {
+    const res = await msalInstance.acquireTokenSilent(req);
+    return res.accessToken;
+  } catch(e) {
+    const res = await msalInstance.acquireTokenRedirect(req);
+    return res?.accessToken;
+  }
+}
+
+// ── LOAD EMAILS ───────────────────────────────
+async function loadEmails() {
+  setLoadBar(20);
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = `<tr><td colspan="8"><div class="state-box"><div class="spinner"></div><div class="msg">Fetching emails...</div><div>Querying Microsoft 365</div></div></td></tr>`;
+
+  try {
+    const token = await getToken();
+    setLoadBar(50);
+
+    const since = new Date();
+    since.setDate(since.getDate() - CONFIG.daysBack);
+    const sinceStr = since.toISOString();
+    const hd = encodeURIComponent(CONFIG.helpdesk);
+    const fields = 'id,subject,from,toRecipients,receivedDateTime,bodyPreview';
+
+    // Fetch received (from helpdesk) + sent (to helpdesk)
+    const [rxRes, txRes] = await Promise.all([
+      fetch(`https://graph.microsoft.com/v1.0/me/messages?$filter=from/emailAddress/address eq '${CONFIG.helpdesk}' and receivedDateTime ge ${sinceStr}&$select=${fields}&$top=50&$orderby=receivedDateTime desc`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      fetch(`https://graph.microsoft.com/v1.0/me/messages?$filter=toRecipients/any(r:r/emailAddress/address eq '${CONFIG.helpdesk}') and receivedDateTime ge ${sinceStr}&$select=${fields}&$top=50&$orderby=receivedDateTime desc`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    ]);
+
+    setLoadBar(80);
+    const rx = await rxRes.json();
+    const tx = await txRes.json();
+
+    const rxEmails = (rx.value || []).map((m,i) => toTicket(m, 'IN', i));
+    const txEmails = (tx.value || []).map((m,i) => toTicket(m, 'OUT', rxEmails.length + i));
+
+    allEmails = [...rxEmails, ...txEmails].sort((a,b) => new Date(b.date) - new Date(a.date));
+    setLoadBar(100);
+    render();
+  } catch(err) {
+    console.error(err);
+    setLoadBar(0);
+    tbody.innerHTML = `<tr><td colspan="8"><div class="state-box"><div class="icon">⚠</div><div class="msg">Could not load emails</div><div>${err.message || 'Check permissions and try again'}</div></div></td></tr>`;
+  }
+}
+
+function toTicket(msg, dir, idx) {
+  const id = `TKT-${String(idx + 1).padStart(3, '0')}`;
+  const savedStatus = statusMap[msg.id];
+  const age = daysAgo(msg.receivedDateTime);
+  const autoStatus = savedStatus || (age >= 7 ? 'Overdue' : age >= 3 ? 'Open' : 'New');
+  return {
+    id, msgId: msg.id,
+    subject: msg.subject || '(no subject)',
+    from: dir === 'IN'
+      ? (msg.from?.emailAddress?.address || '')
+      : (msg.toRecipients?.[0]?.emailAddress?.address || ''),
+    dir,
+    date: msg.receivedDateTime,
+    snippet: msg.bodyPreview || '',
+    status: autoStatus
+  };
+}
+
+// ── RENDER TABLE ──────────────────────────────
+function render() {
+  const fs = document.getElementById('fStatus').value;
+  const fd = document.getElementById('fDir').value;
+  const fa = document.getElementById('fAge').value;
+  const fq = document.getElementById('fSearch').value.toLowerCase();
+
+  const filtered = allEmails.filter(r => {
+    if (fs && r.status !== fs) return false;
+    if (fd && r.dir !== fd) return false;
+    if (fa && ageBucket(r.date) !== fa) return false;
+    if (fq && !r.subject.toLowerCase().includes(fq) && !r.from.toLowerCase().includes(fq)) return false;
+    return true;
+  });
+
+  document.getElementById('sTotal').textContent = filtered.length;
+  document.getElementById('sOverdue').textContent = filtered.filter(r => r.status === 'Overdue').length;
+  document.getElementById('sOpen').textContent = filtered.filter(r => r.status === 'Open' || r.status === 'Pending').length;
+  document.getElementById('sClosed').textContent = filtered.filter(r => r.status === 'Closed').length;
+  document.getElementById('resultCount').textContent = `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`;
+
+  const tbody = document.getElementById('tbody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="state-box"><div class="icon">📭</div><div class="msg">No emails found</div><div>Try adjusting your filters</div></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    const age = daysAgo(r.date);
+    const ac = age >= 7 ? 'age-hot' : age >= 3 ? 'age-warn' : 'age-ok';
+    const sc = { New:'b-new', Open:'b-open', Overdue:'b-overdue', Closed:'b-closed', Pending:'b-pending' }[r.status] || 'b-new';
+    const dateStr = new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    const fromShort = r.from.split('@')[0];
+    return `<tr>
+      <td class="col-id"><span class="tid">${r.id}</span></td>
+      <td class="col-sub" title="${r.subject}">${r.subject}</td>
+      <td class="col-from"><span class="from-text" title="${r.from}">${fromShort}</span></td>
+      <td class="col-dir"><span class="badge ${r.dir === 'IN' ? 'b-in' : 'b-out'}">${r.dir}</span></td>
+      <td class="col-date" style="font-size:12px;color:var(--muted)">${dateStr}</td>
+      <td class="col-age"><span class="${ac}">${age}d</span></td>
+      <td class="col-status"><span class="badge ${sc}">${r.status}</span></td>
+      <td class="col-act"><button class="btn-view" onclick="openPanel('${r.msgId}')">Open</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── DETAIL PANEL ──────────────────────────────
+function openPanel(msgId) {
+  const r = allEmails.find(e => e.msgId === msgId);
+  if (!r) return;
+  document.getElementById('panelTitle').textContent = r.id;
+  document.getElementById('panelBody').innerHTML = `
+    <div class="panel-row"><div class="panel-label">Subject</div><div class="panel-value" style="font-weight:500">${r.subject}</div></div>
+    <div class="panel-row"><div class="panel-label">Direction</div><div class="panel-value">${r.dir === 'IN' ? '← Received from helpdesk' : '→ Sent to helpdesk'}</div></div>
+    <div class="panel-row"><div class="panel-label">${r.dir === 'IN' ? 'From' : 'To'}</div><div class="panel-value" style="color:var(--accent)">${r.from}</div></div>
+    <div class="panel-row"><div class="panel-label">Date</div><div class="panel-value">${new Date(r.date).toLocaleString('en-IN')}</div></div>
+    <div class="panel-row"><div class="panel-label">Age</div><div class="panel-value"><span class="${daysAgo(r.date) >= 7 ? 'age-hot' : daysAgo(r.date) >= 3 ? 'age-warn' : 'age-ok'}">${daysAgo(r.date)} day(s) old</span></div></div>
+    <div class="panel-row"><div class="panel-label">Preview</div><div class="panel-snippet">${r.snippet || 'No preview available'}</div></div>
+    <div class="panel-row" style="margin-top:16px">
+      <div class="panel-label">Update Status</div>
+      <select class="status-select" id="pStatus">
+        <option ${r.status==='New'?'selected':''}>New</option>
+        <option ${r.status==='Open'?'selected':''}>Open</option>
+        <option ${r.status==='Pending'?'selected':''}>Pending</option>
+        <option ${r.status==='Overdue'?'selected':''}>Overdue</option>
+        <option ${r.status==='Closed'?'selected':''}>Closed</option>
+      </select>
+      <button class="btn-save-status" onclick="saveStatus('${msgId}')">Save status</button>
+    </div>
+  `;
+  document.getElementById('detailPanel').style.display = 'flex';
+}
+
+function closePanel() {
+  document.getElementById('detailPanel').style.display = 'none';
+}
+
+function saveStatus(msgId) {
+  const newStatus = document.getElementById('pStatus').value;
+  const ticket = allEmails.find(e => e.msgId === msgId);
+  if (ticket) {
+    ticket.status = newStatus;
+    statusMap[msgId] = newStatus;
+    saveStatuses();
+    render();
+    closePanel();
+  }
+}
+
+// ── HELPERS ───────────────────────────────────
+function daysAgo(d) { return Math.floor((Date.now() - new Date(d)) / 86400000); }
+function ageBucket(d) { const a = daysAgo(d); return a >= 7 ? 'hot' : a >= 3 ? 'warn' : 'ok'; }
+function setLoadBar(pct) {
+  const bar = document.getElementById('loadBar');
+  if (!bar) return;
+  bar.style.width = pct + '%';
+  if (pct >= 100) setTimeout(() => { bar.style.width = '0'; }, 600);
+}
+
+// ── BOOT ──────────────────────────────────────
+console.log("MSAL available:", typeof msal); initMsal().catch(console.error);
+</script>
+</body>
+</html>
